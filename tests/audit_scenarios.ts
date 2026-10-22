@@ -12,7 +12,7 @@ function runScenario(name: string, setup: (state: GameState, cmd: CommandManager
   setup(state, cmd);
 
   for (let i = 1; i <= ticks; i++) {
-    state.tick(0.1); // 0.1s step
+    state.tick(0.1);
   }
 
   console.log(`Final Sim Time: ${state.simTimeSec.toFixed(1)}s`);
@@ -29,31 +29,25 @@ function runScenario(name: string, setup: (state: GameState, cmd: CommandManager
   console.log(`Active Drones Busy: ${state.repairManager.drones.filter(d => d.status === 'REPAIRING').length}`);
 }
 
-// 1. Normal Operation (100 seconds)
-runScenario('1. Baseline Normal Operation (100s)', (state, cmd) => {
-  // Player seals initial breach and tunes comms
+runScenario('1. Baseline Normal Operation (100s)', (_state, cmd) => {
   cmd.dispatchRepairTask('mod-hull', 'SEAL_BREACH', 15);
   cmd.tuneFrequency(1420.4);
 }, 1000);
 
-// 2. Power Shortage / SCRAM Test
-runScenario('2. Reactor SCRAM & Battery Backup (100s)', (state, cmd) => {
+runScenario('2. Reactor SCRAM & Battery Backup (100s)', (_state, cmd) => {
   cmd.triggerReactorScram();
 }, 1000);
 
-// 3. Reactor Overheat Test (Throttle 140%)
-runScenario('3. High Reactor Throttle Overheat (200s)', (state, cmd) => {
+runScenario('3. High Reactor Throttle Overheat (200s)', (_state, cmd) => {
   cmd.setReactorThrottle(140);
 }, 2000);
 
-// 4. Oxygen Emergency Test (Breaches unsealed, no power to LS)
-runScenario('4. Uncontained Hull Breaches & Oxygen Depletion (300s)', (state, cmd) => {
-  state.lifeSupport.o2GenKwDemand = 500; // Unreachable demand causing 0 power
+runScenario('4. Uncontained Hull Breaches & Oxygen Depletion (300s)', (state, _cmd) => {
+  state.lifeSupport.o2GenKwDemand = 500;
 }, 3000);
 
-// 5. Full Campaign Progression
-runScenario('5. Full Campaign Progression to Rescue Ending', (state, cmd) => {
+runScenario('5. Full Campaign Progression to Rescue Ending', (_state, cmd) => {
   cmd.dispatchRepairTask('mod-hull', 'SEAL_BREACH', 10);
   cmd.tuneFrequency(1420.4);
   cmd.setReactorThrottle(90);
-}, 6000); // 600 seconds
+}, 6000);
