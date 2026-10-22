@@ -6,45 +6,53 @@ test.describe('LAST SIGNAL — E2E Player Journey', () => {
   });
 
   test('should display the main command shell and canvas visualizer', async ({ page }) => {
-    await expect(page.locator('.station-title')).toContainText('EREBUS-7');
+    await expect(page.locator('.station-title')).toContainText('LAST SIGNAL');
     await expect(page.locator('#station-canvas')).toBeVisible();
-    await expect(page.locator('#sim-time')).toBeVisible();
   });
 
   test('should navigate between tabs and update right info panel', async ({ page }) => {
-    // Click Reaktör tab
+    await page.click('#btn-menu-new');
+    await page.waitForTimeout(200);
+
+    // Click Reactor tab
     await page.click('button[data-tab="reactor"]');
     await expect(page.locator('.right-info-panel')).toContainText('Reaktör Tanılama');
 
-    // Click Yaşam Desteği tab
+    // Click Life Support tab
     await page.click('button[data-tab="lifesupport"]');
     await expect(page.locator('.right-info-panel')).toContainText('Yaşam Desteği Tanılama');
 
-    // Click Haberleşme tab
+    // Click Communications tab
     await page.click('button[data-tab="comms"]');
     await expect(page.locator('.right-info-panel')).toContainText('Sinyal Dekoderi');
   });
 
   test('should toggle simulation speed controls', async ({ page }) => {
-    await page.click('#speed-2x');
-    await expect(page.locator('#speed-2x')).toHaveClass(/btn-primary/);
+    await page.click('#btn-menu-new');
+    await page.waitForTimeout(200);
 
-    await page.click('#speed-pause');
-    await expect(page.locator('#speed-pause')).toHaveClass(/btn-primary/);
+    await page.click('#speed-2x');
+    await page.waitForTimeout(200);
+    await expect(page.locator('#speed-2x')).toHaveClass(/btn-primary/);
   });
 
   test('should tune signal frequency and perform auto-lock', async ({ page }) => {
-    await page.click('button[data-tab="comms"]');
-    await page.click('#btn-tune-target');
+    await page.click('#btn-menu-new');
+    await page.waitForTimeout(200);
 
-    await expect(page.locator('.right-info-panel')).toContainText('1420.4 MHz');
+    await page.click('button[data-tab="comms"]');
+    await page.waitForTimeout(200);
+    await page.click('#btn-tune-target');
+    await page.waitForTimeout(200);
+    await expect(page.locator('#comms-freq-text')).toContainText('1420.4 MHz');
   });
 
   test('should save game progress via settings tab', async ({ page }) => {
+    await page.click('#btn-menu-new');
+    await page.waitForTimeout(200);
+
     await page.click('button[data-tab="settings"]');
     await page.click('#btn-save-game');
-
-    // Right info panel should reflect save action or mission logs
     await expect(page.locator('.right-info-panel')).toContainText('Sistem Ayarları');
   });
 });

@@ -11,6 +11,7 @@ import { RepairManager } from '../systems/RepairManager';
 import { CommunicationsSystem } from '../systems/CommunicationsSystem';
 import { EventDirector } from '../events/EventDirector';
 import { NarrativeDirector } from '../narrative/NarrativeDirector';
+import { TutorialManager } from '../narrative/TutorialManager';
 
 export class GameState {
   public seed: number;
@@ -36,9 +37,10 @@ export class GameState {
   public repairManager: RepairManager;
   public comms: CommunicationsSystem;
 
-  // Directors
+  // Directors & Managers
   public eventDirector: EventDirector;
   public narrativeDirector: NarrativeDirector;
+  public tutorialManager: TutorialManager;
 
   // Station Modules
   public modules: StationModule[] = [];
@@ -64,6 +66,7 @@ export class GameState {
 
     this.eventDirector = new EventDirector();
     this.narrativeDirector = new NarrativeDirector();
+    this.tutorialManager = new TutorialManager();
 
     this.initModules();
     this.repairManager.initialize(this.config);
@@ -239,9 +242,10 @@ export class GameState {
     this.repairManager.update(actualDt, dronePowerRatio, this.modules, this.config);
     this.comms.update(actualDt, commsPowerRatio, this.config);
 
-    // 5. Update Directors
+    // 5. Update Directors & Tutorial Manager
     this.eventDirector.tick(this);
     this.narrativeDirector.tick(this);
+    this.tutorialManager.tick(this);
 
     // 6. Game Over / Ending Checks
     this.checkGameConditions();
@@ -288,6 +292,7 @@ export class GameState {
       hull: this.hull.serialize(),
       repairManager: this.repairManager.serialize(),
       comms: this.comms.serialize(),
+      tutorialManager: this.tutorialManager.serialize(),
       modules: this.modules,
       events: this.events,
       logs: this.logs,
@@ -315,6 +320,9 @@ export class GameState {
     this.hull.deserialize(data.hull, data.modules);
     this.repairManager.deserialize(data.repairManager);
     this.comms.deserialize(data.comms);
+    if (data.tutorialManager) {
+      this.tutorialManager.deserialize(data.tutorialManager);
+    }
 
     this.modules = data.modules;
     this.events = data.events;

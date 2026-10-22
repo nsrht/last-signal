@@ -32,18 +32,22 @@ export class UIController {
     document.getElementById('speed-pause')?.addEventListener('click', () => {
       this.audio.playClick();
       this.cmd.setSpeed(0);
+      this.updateTopBar();
     });
     document.getElementById('speed-1x')?.addEventListener('click', () => {
       this.audio.playClick();
       this.cmd.setSpeed(1);
+      this.updateTopBar();
     });
     document.getElementById('speed-2x')?.addEventListener('click', () => {
       this.audio.playClick();
       this.cmd.setSpeed(2);
+      this.updateTopBar();
     });
     document.getElementById('speed-4x')?.addEventListener('click', () => {
       this.audio.playClick();
       this.cmd.setSpeed(4);
+      this.updateTopBar();
     });
   }
 
@@ -347,6 +351,7 @@ export class UIController {
     document.getElementById('btn-tune-target')?.addEventListener('click', () => {
       this.audio.playClick();
       this.cmd.tuneFrequency(1420.4);
+      this.renderRightInfoPanel();
     });
 
     if (selectedMod) {
