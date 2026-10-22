@@ -4,17 +4,21 @@ import { StationRenderer } from '../rendering/StationRenderer';
 import { SignalScopeRenderer } from '../rendering/SignalScopeRenderer';
 import { SaveManager } from '../persistence/SaveManager';
 import { AudioManager } from '../audio/AudioManager';
+import { SVG_ICONS } from './icons';
+import { ManualModal } from './ManualModal';
 
 export class UIController {
   private state: GameState;
   private cmd: CommandManager;
   private stationRenderer: StationRenderer;
   private audio: AudioManager;
+  private manualModal: ManualModal;
   private signalScopeRenderer?: SignalScopeRenderer;
   private activeTab: string = 'overview';
   private lastRenderedTab: string = '';
   private lastSelectedModuleId: string | null = null;
   private lastClimaxChoiceState: boolean = false;
+  private lastTutorialStepIndex: number = -1;
 
   constructor(state: GameState, cmd: CommandManager, stationRenderer: StationRenderer) {
     this.state = state;
@@ -22,13 +26,52 @@ export class UIController {
     this.stationRenderer = stationRenderer;
     this.audio = new AudioManager();
 
+    const manualOverlay = document.createElement('div');
+    manualOverlay.id = 'manual-modal-container';
+    manualOverlay.style.display = 'none';
+    document.body.appendChild(manualOverlay);
+    this.manualModal = new ManualModal(manualOverlay);
+
     this.setupTabListeners();
     this.setupHeaderListeners();
+    this.setupTutorialGlobalListeners();
 
     window.addEventListener('click', () => this.audio.init(), { once: true });
   }
 
+  public setState(state: GameState, cmd: CommandManager): void {
+    this.state = state;
+    this.cmd = cmd;
+    this.lastTutorialStepIndex = -1;
+    this.lastRenderedTab = '';
+    this.lastSelectedModuleId = null;
+    this.renderRightInfoPanel();
+    this.renderOperationsArea();
+  }
+
+  public showManual(): void {
+    this.manualModal.show();
+  }
+
+  private setupTutorialGlobalListeners(): void {
+    document.addEventListener('click', (e) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.id === 'btn-skip-tutorial' || target.closest('#btn-skip-tutorial'))) {
+        this.state.tutorialManager.skip();
+        const cardEl = document.getElementById('tutorial-card');
+        if (cardEl) {
+          cardEl.style.display = 'none';
+        }
+        this.lastTutorialStepIndex = -1;
+      }
+    });
+  }
+
   private setupHeaderListeners(): void {
+    document.getElementById('btn-toggle-sidebar')?.addEventListener('click', () => {
+      document.querySelector('.left-nav')?.classList.toggle('open');
+    });
+
     document.getElementById('speed-pause')?.addEventListener('click', () => {
       this.audio.playClick();
       this.cmd.setSpeed(0);
@@ -59,7 +102,12 @@ export class UIController {
         const target = e.currentTarget as HTMLElement;
         const tab = target.getAttribute('data-tab');
         if (tab) {
-          this.setActiveTab(tab);
+          if (tab === 'manual') {
+            this.showManual();
+          } else {
+            this.setActiveTab(tab);
+          }
+          document.querySelector('.left-nav')?.classList.remove('open');
         }
       });
     });
@@ -89,6 +137,7 @@ export class UIController {
 
   public update(): void {
     this.updateTopBar();
+    this.renderTutorialCard();
 
     const climaxUnlocked = this.state.narrativeDirector.climaxChoiceUnlocked;
     if (climaxUnlocked !== this.lastClimaxChoiceState) {
@@ -98,11 +147,65 @@ export class UIController {
 
     if (this.signalScopeRenderer && this.activeTab === 'comms') {
       this.signalScopeRenderer.render(this.state.comms);
-      // Update dynamic comms text if element present
       const freqEl = document.getElementById('comms-freq-text');
       if (freqEl) {
         freqEl.textContent = `${this.state.comms.activeFrequencyMhz.toFixed(1)} MHz`;
       }
+    }
+  }
+
+  private renderTutorialCard(): void {
+    const viewport = document.querySelector('.central-viewport');
+    if (!viewport) return;
+
+    let cardEl = document.getElementById('tutorial-card');
+    const step = this.state.tutorialManager.getCurrentStep();
+
+    if (!step) {
+      if (cardEl) {
+        cardEl.style.display = 'none';
+      }
+      this.lastTutorialStepIndex = -1;
+      return;
+    }
+
+    if (!cardEl) {
+      cardEl = document.createElement('div');
+      cardEl.id = 'tutorial-card';
+      cardEl.className = 'tutorial-floating-card';
+
+      const header = document.createElement('div');
+      header.className = 'tutorial-card-header';
+
+      const title = document.createElement('span');
+      title.className = 'tutorial-card-title';
+
+      const skipBtn = document.createElement('button');
+      skipBtn.className = 'btn btn-small';
+      skipBtn.id = 'btn-skip-tutorial';
+      skipBtn.textContent = 'Atla ✕';
+
+      header.appendChild(title);
+      header.appendChild(skipBtn);
+
+      const desc = document.createElement('div');
+      desc.className = 'tutorial-card-desc';
+
+      cardEl.appendChild(header);
+      cardEl.appendChild(desc);
+
+      viewport.appendChild(cardEl);
+      this.lastTutorialStepIndex = -1;
+    }
+
+    cardEl.style.display = 'block';
+
+    if (this.lastTutorialStepIndex !== step.id) {
+      this.lastTutorialStepIndex = step.id;
+      const titleEl = cardEl.querySelector('.tutorial-card-title');
+      const descEl = cardEl.querySelector('.tutorial-card-desc');
+      if (titleEl) titleEl.textContent = step.title;
+      if (descEl) descEl.textContent = step.description;
     }
   }
 
@@ -314,7 +417,7 @@ export class UIController {
       html = `
         <div style="display: flex; align-items: center; gap: 12px;">
           <span style="font-family: var(--font-mono); font-size: 11px;">KOMUTLAR [${selectedMod.name}]:</span>
-          <button class="btn btn-primary" id="btn-dispatch-repair">🤖 Dron Onarımı Başlat</button>
+          <button class="btn btn-primary" id="btn-dispatch-repair">${SVG_ICONS.drones} Dron Onarımı Başlat</button>
           ${selectedMod.isBreached ? `<button class="btn btn-danger" id="btn-dispatch-seal">⚠️ Sızıntıyı Mühürle</button>` : ''}
           <button class="btn" id="btn-toggle-isolation">${selectedMod.isIsolated ? '🔓 Yalıtımı Kaldır' : '🔒 Modülü İzole Et'}</button>
         </div>

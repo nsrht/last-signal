@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - master
+      - feat/last-signal-space-station-game-14876453865699725433
   workflow_dispatch:
 
 permissions:
