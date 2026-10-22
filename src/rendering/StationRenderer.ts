@@ -185,14 +185,16 @@ export class StationRenderer {
     this.ctx.fillRect(mod.x, mod.y + mod.height - cSize, cSize, cSize);
     this.ctx.fillRect(mod.x + mod.width - cSize, mod.y + mod.height - cSize, cSize, cSize);
 
+    // Text label (truncated if longer than module width)
     this.ctx.fillStyle = '#e0e6ed';
-    this.ctx.font = 'bold 10px monospace';
-    this.ctx.fillText(mod.name, mod.x + 8, mod.y + 18);
+    this.ctx.font = 'bold 9px monospace';
+    const displayName = mod.name.length > 18 ? mod.name.substring(0, 16) + '..' : mod.name;
+    this.ctx.fillText(displayName, mod.x + 6, mod.y + 16);
 
-    const barX = mod.x + 8;
-    const barY = mod.y + mod.height - 16;
-    const barW = mod.width - 16;
-    const barH = 6;
+    const barX = mod.x + 6;
+    const barY = mod.y + mod.height - 14;
+    const barW = mod.width - 12;
+    const barH = 5;
 
     this.ctx.fillStyle = '#0a0d12';
     this.ctx.fillRect(barX, barY, barW, barH);
@@ -205,17 +207,17 @@ export class StationRenderer {
     this.ctx.fillStyle = healthColor;
     this.ctx.fillRect(barX, barY, fillW, barH);
 
-    let badgeX = mod.x + mod.width - 24;
+    let badgeX = mod.x + mod.width - 20;
     if (mod.isBreached) {
       this.ctx.fillStyle = '#ff3344';
-      this.ctx.font = 'bold 11px monospace';
-      this.ctx.fillText('⚠️', badgeX, mod.y + 18);
-      badgeX -= 16;
+      this.ctx.font = 'bold 10px monospace';
+      this.ctx.fillText('⚠️', badgeX, mod.y + 16);
+      badgeX -= 14;
     }
     if (mod.isIsolated) {
       this.ctx.fillStyle = '#ffb300';
-      this.ctx.font = 'bold 11px monospace';
-      this.ctx.fillText('🔒', badgeX, mod.y + 18);
+      this.ctx.font = 'bold 10px monospace';
+      this.ctx.fillText('🔒', badgeX, mod.y + 16);
     }
   }
 }
