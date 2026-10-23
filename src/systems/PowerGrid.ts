@@ -2,45 +2,66 @@ import { SystemId } from '../core/types';
 
 export interface PowerConsumer {
   systemId: SystemId;
-  priority: 1 | 2 | 3; // 1 = Critical, 2 = Essential, 3 = Non-essential
+  priority: number; // 1 = Critical, 2 = Essential, 3 = Non-essential
   powerRequestedKw: number;
 }
 
 export class PowerGrid {
   public totalGenerationKw: number = 0;
+  public totalCapacityKw: number = 0;
   public totalDemandKw: number = 0;
   public allocations: Map<SystemId, number> = new Map();
+  public customPriorities: Map<SystemId, number> = new Map();
   public isBrownout: boolean = false;
+
+  constructor() {
+    this.customPriorities.set(SystemId.LifeSupport, 1);
+    this.customPriorities.set(SystemId.Hull, 1);
+    this.customPriorities.set(SystemId.Thermal, 2);
+    this.customPriorities.set(SystemId.Battery, 2);
+    this.customPriorities.set(SystemId.Communications, 3);
+    this.customPriorities.set(SystemId.Drones, 3);
+  }
+
+  public setPriority(systemId: SystemId, priority: number): void {
+    this.customPriorities.set(systemId, Math.max(1, Math.min(3, priority)));
+  }
+
+  public getPriority(systemId: SystemId): number {
+    return this.customPriorities.get(systemId) ?? 2;
+  }
 
   public updateAllocations(availablePowerKw: number, consumers: PowerConsumer[]): Map<SystemId, number> {
     this.totalGenerationKw = availablePowerKw;
+    this.totalCapacityKw = availablePowerKw;
     this.allocations.clear();
 
-    this.totalDemandKw = consumers.reduce((sum, c) => sum + c.powerRequestedKw, 0);
+    const activeConsumers = consumers.map(c => ({
+      ...c,
+      priority: this.getPriority(c.systemId),
+    }));
+
+    this.totalDemandKw = activeConsumers.reduce((sum, c) => sum + c.powerRequestedKw, 0);
 
     let remainingPower = availablePowerKw;
     this.isBrownout = availablePowerKw < this.totalDemandKw;
 
-    // Group by priority
-    for (const priorityLevel of [1, 2, 3] as const) {
-      const levelConsumers = consumers.filter(c => c.priority === priorityLevel);
+    for (const priorityLevel of [1, 2, 3]) {
+      const levelConsumers = activeConsumers.filter(c => c.priority === priorityLevel);
       const levelDemand = levelConsumers.reduce((sum, c) => sum + c.powerRequestedKw, 0);
 
       if (remainingPower >= levelDemand) {
-        // Full power to this level
         for (const consumer of levelConsumers) {
           this.allocations.set(consumer.systemId, consumer.powerRequestedKw);
         }
         remainingPower -= levelDemand;
       } else if (remainingPower > 0) {
-        // Proportional power ratio for this level
         const ratio = remainingPower / (levelDemand || 1);
         for (const consumer of levelConsumers) {
           this.allocations.set(consumer.systemId, consumer.powerRequestedKw * ratio);
         }
         remainingPower = 0;
       } else {
-        // No power left for this level
         for (const consumer of levelConsumers) {
           this.allocations.set(consumer.systemId, 0);
         }
@@ -59,16 +80,22 @@ export class PowerGrid {
   public serialize() {
     return {
       totalGenerationKw: this.totalGenerationKw,
+      totalCapacityKw: this.totalCapacityKw,
       totalDemandKw: this.totalDemandKw,
       allocations: Array.from(this.allocations.entries()),
+      customPriorities: Array.from(this.customPriorities.entries()),
       isBrownout: this.isBrownout,
     };
   }
 
-  public deserialize(data: ReturnType<PowerGrid['serialize']>): void {
+  public deserialize(data: any): void {
     this.totalGenerationKw = data.totalGenerationKw;
+    this.totalCapacityKw = data.totalCapacityKw ?? data.totalGenerationKw;
     this.totalDemandKw = data.totalDemandKw;
     this.allocations = new Map(data.allocations);
+    if (data.customPriorities) {
+      this.customPriorities = new Map(data.customPriorities);
+    }
     this.isBrownout = data.isBrownout;
   }
 }

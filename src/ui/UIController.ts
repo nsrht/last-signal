@@ -6,6 +6,7 @@ import { SaveManager } from '../persistence/SaveManager';
 import { AudioManager } from '../audio/AudioManager';
 import { SVG_ICONS } from './icons';
 import { ManualModal } from './ManualModal';
+import { SystemId } from '../core/types';
 
 export class UIController {
   private state: GameState;
@@ -95,7 +96,7 @@ export class UIController {
   }
 
   private setupTabListeners(): void {
-    const navItems = document.querySelectorAll('.left-nav .nav-item');
+    const navItems = document.querySelectorAll('.left-nav .nav-item, .mobile-nav-item');
     navItems.forEach((btn) => {
       btn.addEventListener('click', (e) => {
         this.audio.playClick();
@@ -124,7 +125,7 @@ export class UIController {
 
   public setActiveTab(tab: string): void {
     this.activeTab = tab;
-    const navItems = document.querySelectorAll('.left-nav .nav-item');
+    const navItems = document.querySelectorAll('.left-nav .nav-item, .mobile-nav-item');
     navItems.forEach((btn) => {
       const bTab = btn.getAttribute('data-tab');
       if (bTab === tab) btn.classList.add('active');
@@ -138,6 +139,7 @@ export class UIController {
   public update(): void {
     this.updateTopBar();
     this.renderTutorialCard();
+    this.renderEndingOverlay();
 
     const climaxUnlocked = this.state.narrativeDirector.climaxChoiceUnlocked;
     if (climaxUnlocked !== this.lastClimaxChoiceState) {
@@ -152,6 +154,64 @@ export class UIController {
         freqEl.textContent = `${this.state.comms.activeFrequencyMhz.toFixed(1)} MHz`;
       }
     }
+
+    if (['drones', 'power', 'thermal', 'hull', 'logs'].includes(this.activeTab)) {
+      this.renderRightInfoPanel();
+      this.renderOperationsArea();
+    }
+  }
+
+  private renderEndingOverlay(): void {
+    let overlay = document.getElementById('ending-overlay');
+
+    if (this.state.ending === 'NONE') {
+      if (overlay) overlay.style.display = 'none';
+      return;
+    }
+
+    if (!overlay) {
+      overlay = document.createElement('div');
+      overlay.id = 'ending-overlay';
+      overlay.className = 'modal-overlay';
+      document.body.appendChild(overlay);
+    }
+
+    overlay.style.display = 'flex';
+
+    const isSuccess = this.state.ending === 'RESCUE' || this.state.ending === 'SACRIFICE';
+    const endingTitle =
+      this.state.ending === 'RESCUE'
+        ? '📡 MİSYON BAŞARILI: KURTARMA SİNYALİ GÖNDERİLDİ'
+        : this.state.ending === 'SACRIFICE'
+        ? '🌌 MİSYON BAŞARILI: DERİN UZAY FEDAKARLIĞI'
+        : '💥 MİSYON BAŞARISIZ: İSTASYON KATASTROFİK ÇÖKÜŞÜ';
+
+    overlay.innerHTML = `
+      <div class="modal-card" style="border-color: ${isSuccess ? 'var(--color-cyan-glow)' : 'var(--color-red)'}; max-width: 520px; text-align: center;">
+        <h2 style="color: ${isSuccess ? 'var(--color-cyan-glow)' : 'var(--color-red)'}; margin-bottom: 12px; font-size: 18px;">${endingTitle}</h2>
+        <p style="color: var(--text-main); font-size: 13px; line-height: 1.5; margin-bottom: 16px;">${this.state.gameOverReason}</p>
+
+        <div style="background: rgba(0,0,0,0.4); border: 1px solid var(--bg-panel-border); border-radius: 4px; padding: 12px; margin-bottom: 20px; font-size: 11px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: left;">
+          <div>Misyon Süresi: <strong>${Math.floor(this.state.simTimeSec)} saniye</strong></div>
+          <div>Bölüm: <strong>${this.state.currentAct}</strong></div>
+          <div>Gövde Bütünlüğü: <strong>%${Math.round(this.state.hull.integrity)}</strong></div>
+          <div>Oksijen Seviyesi: <strong>%${Math.round(this.state.lifeSupport.o2Level)}</strong></div>
+          <div>Sinyal Paketleri: <strong>${this.state.comms.getDecodedCount()} / ${this.state.comms.getTotalPacketCount()}</strong></div>
+          <div>Sinyal Kalitesi: <strong>%${Math.round(this.state.comms.signalQuality)}</strong></div>
+        </div>
+
+        <div style="display: flex; gap: 12px; justify-content: center;">
+          <button class="btn btn-primary" id="btn-ending-restart">🔄 Yeni Oyun Başlat</button>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-ending-restart')?.addEventListener('click', () => {
+      this.audio.playClick();
+      if (overlay) overlay.style.display = 'none';
+      SaveManager.deleteSave();
+      window.location.reload();
+    });
   }
 
   private renderTutorialCard(): void {
@@ -271,7 +331,82 @@ export class UIController {
       `;
     }
 
-    if (this.activeTab === 'reactor') {
+    if (this.activeTab === 'power') {
+      const netPower = this.state.powerGrid.totalCapacityKw - this.state.powerGrid.totalDemandKw;
+      html += `
+        <div class="panel-section">
+          <div class="panel-header">⚡ Güç Dağıtım Metrikleri</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
+            <div>Reaktör Üretimi: <strong style="color: var(--color-cyan-glow)">${Math.round(this.state.reactor.powerGeneratedKw)} kW</strong></div>
+            <div>Toplam Güç Talebi: <strong>${Math.round(this.state.powerGrid.totalDemandKw)} kW</strong></div>
+            <div>Güç Dengesi: <strong style="color: ${netPower >= 0 ? 'var(--color-green)' : 'var(--color-red)'}">${Math.round(netPower)} kW (${netPower >= 0 ? 'FAZLA' : 'AÇIK'})</strong></div>
+            <div>Batarya Yüzdesi: <strong>%${Math.round(this.state.battery.getChargePercentage())} (${Math.round(this.state.battery.currentChargeKwh)} kWh YEDEK)</strong></div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-header">🎛️ Sistem Öncelik Sıralaması</div>
+          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+            ${[
+              { id: SystemId.LifeSupport, name: 'Yaşam Desteği' },
+              { id: SystemId.Hull, name: 'Gövde Bütünlüğü' },
+              { id: SystemId.Thermal, name: 'Isıl Soğutma' },
+              { id: SystemId.Battery, name: 'Batarya Şarjı' },
+              { id: SystemId.Communications, name: 'Haberleşme Dekoderi' },
+              { id: SystemId.Drones, name: 'Onarım Dron Hangar' },
+            ].map(sys => {
+              const prio = this.state.powerGrid.getPriority(sys.id);
+              return `
+                <div style="display: flex; align-items: center; justify-content: space-between;">
+                  <span>${sys.name}:</span>
+                  <select class="btn btn-small btn-priority-select" data-sys="${sys.id}">
+                    <option value="1" ${prio === 1 ? 'selected' : ''}>1 (Yüksek)</option>
+                    <option value="2" ${prio === 2 ? 'selected' : ''}>2 (Orta)</option>
+                    <option value="3" ${prio === 3 ? 'selected' : ''}>3 (Düşük)</option>
+                  </select>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    } else if (this.activeTab === 'drones') {
+      html += `
+        <div class="panel-section">
+          <div class="panel-header">🤖 Onarım Hangar Durumu</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
+            <div>Toplam Dron Sayısı: <strong>${this.state.repairManager.drones.length}</strong></div>
+            <div>Kullanılabilir Dron: <strong style="color: var(--color-green)">${this.state.repairManager.drones.filter(d => d.status === 'IDLE').length}</strong></div>
+            <div>Görevdeki Dron: <strong style="color: var(--color-cyan-glow)">${this.state.repairManager.drones.filter(d => d.status === 'REPAIRING').length}</strong></div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-header">📋 Dron Görev Listesi</div>
+          <div style="display: flex; flex-direction: column; gap: 8px; font-size: 11px;">
+            ${this.state.repairManager.drones.map(d => {
+              const task = d.currentTask;
+              const targetMod = task ? this.state.modules.find(m => m.id === task.targetModuleId) : null;
+              const progressPct = task && task.duration > 0 ? Math.min(100, Math.round((task.progress / 100) * 100)) : 0;
+              return `
+                <div style="border-left: 2px solid ${d.status === 'REPAIRING' ? 'var(--color-cyan-glow)' : 'var(--bg-panel-border)'}; padding-left: 6px; display: flex; justify-content: space-between; align-items: center;">
+                  <div>
+                    <div><strong>${d.name}</strong> - <span style="color: ${d.status === 'REPAIRING' ? 'var(--color-cyan-glow)' : 'var(--text-muted)'}">${d.status === 'REPAIRING' ? 'GÖREVDE' : 'BOŞTA'}</span></div>
+                    ${d.status === 'REPAIRING' && task ? `
+                      <div style="color: var(--text-muted); font-size: 10px;">Hedef: ${targetMod?.name || 'Bilinmiyor'} (${task.taskType === 'SEAL_BREACH' ? 'Sızıntı Mühürleme' : 'Modül Onarımı'})</div>
+                      <div style="font-size: 10px; color: var(--color-amber);">İlerleme: %${progressPct}</div>
+                    ` : ''}
+                  </div>
+                  ${d.status === 'REPAIRING' && task ? `
+                    <button class="btn btn-small btn-danger btn-cancel-task" data-taskid="${task.id}">✕ İptal</button>
+                  ` : ''}
+                </div>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `;
+    } else if (this.activeTab === 'reactor') {
       html += `
         <div class="panel-section">
           <div class="panel-header">☢️ Reaktör Tanılama</div>
@@ -295,7 +430,34 @@ export class UIController {
           </div>
         </div>
       `;
+    } else if (this.activeTab === 'thermal') {
+      html += `
+        <div class="panel-section">
+          <div class="panel-header">🌡️ Isıl Kontrol Tanılama</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
+            <div>İstasyon Sıcaklığı: <strong style="color: ${this.state.thermal.temperature > 80 ? 'var(--color-red)' : 'var(--color-green)'}">${this.state.thermal.temperature.toFixed(1)} °C</strong></div>
+            <div>Soğutma Talebi: <strong>${this.state.thermal.coolantPowerDemandKw} kW</strong></div>
+            <div>Aşırı Isınma Durumu: <strong style="color: ${this.state.thermal.isOverheating ? 'var(--color-red)' : 'var(--color-green)'}">${this.state.thermal.isOverheating ? 'KRİTİK ISINMA!' : 'NORMAL'}</strong></div>
+          </div>
+        </div>
+      `;
+    } else if (this.activeTab === 'hull') {
+      const breachedCount = this.state.modules.filter(m => m.isBreached).length;
+      const isolatedCount = this.state.modules.filter(m => m.isIsolated).length;
+      html += `
+        <div class="panel-section">
+          <div class="panel-header">🛡️ Gövde Bütünlüğü Tanılama</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
+            <div>Genel Gövde Sağlığı: <strong style="color: ${this.state.hull.integrity < 50 ? 'var(--color-red)' : 'var(--color-green)'}">%${Math.round(this.state.hull.integrity)}</strong></div>
+            <div>Aktif Sızıntı Sayısı: <strong style="color: ${breachedCount > 0 ? 'var(--color-red)' : 'var(--color-green)'}">${breachedCount} Modül</strong></div>
+            <div>İzole Edilen Kapanlar: <strong style="color: var(--color-amber)">${isolatedCount} Modül</strong></div>
+            <div>Sızıntı Hızı: <strong>${this.state.hull.leakRate.toFixed(2)} %/s</strong></div>
+          </div>
+        </div>
+      `;
     } else if (this.activeTab === 'comms') {
+      const decodedCount = this.state.comms.getDecodedCount();
+      const totalCount = this.state.comms.getTotalPacketCount();
       html += `
         <div class="panel-section">
           <div class="panel-header">📻 Sinyal Dekoderi</div>
@@ -305,7 +467,36 @@ export class UIController {
           <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px;">
             <div>Aktif Frekans: <strong style="color: var(--color-cyan-glow)" id="comms-freq-text">${this.state.comms.activeFrequencyMhz.toFixed(1)} MHz</strong></div>
             <div>Çözümleme İlerlemesi: <strong style="color: var(--color-cyan-glow)">%${Math.round(this.state.comms.decodingProgress)}</strong></div>
+            <div>Deşifre Edilen Paketler: <strong style="color: var(--color-cyan-glow)">${decodedCount} / ${totalCount}</strong></div>
             <div>Sinyal Paraziti: <strong>%${Math.round(this.state.comms.interference)}</strong></div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-header">📡 Sinyal Veri Paketleri</div>
+          <div style="display: flex; flex-direction: column; gap: 6px; font-size: 11px;">
+            ${this.state.comms.packets.map(p => `
+              <div style="border-left: 2px solid ${p.decoded ? 'var(--color-green)' : p.discovered ? 'var(--color-amber)' : 'var(--bg-panel-border)'}; padding-left: 6px;">
+                <div style="display: flex; justify-content: space-between;">
+                  <strong>${p.name}</strong>
+                  <span style="color: ${p.decoded ? 'var(--color-green)' : p.discovered ? 'var(--color-amber)' : 'var(--text-muted)'}">
+                    ${p.decoded ? '✓ ÇÖZÜMLENDİ' : p.discovered ? 'KEŞFEDİLDİ' : 'GİZLİ'}
+                  </span>
+                </div>
+                ${p.decoded ? `<div style="color: var(--text-muted); font-size: 10px; margin-top: 2px;">"${p.content}"</div>` : ''}
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      `;
+    } else if (this.activeTab === 'logs') {
+      html += `
+        <div class="panel-section">
+          <div class="panel-header">📜 Seyir Defteri Özeti</div>
+          <div style="display: flex; flex-direction: column; gap: 4px; font-size: 11px;">
+            <div>Toplam Günlük Kaydı: <strong>${this.state.logs.length}</strong></div>
+            <div>Aktif Görev Sayısı: <strong>${this.state.narrativeDirector.objectives.filter(o => !o.completed).length}</strong></div>
+            <div>Mevcut Periyot: <strong>${this.state.currentAct}</strong></div>
           </div>
         </div>
       `;
@@ -338,12 +529,22 @@ export class UIController {
     `;
 
     if (this.state.narrativeDirector.climaxChoiceUnlocked && this.state.ending === 'NONE') {
+      const hullOk = this.state.hull.integrity >= 50;
+      const commsOk = this.state.comms.signalQuality > 30;
+
       html += `
         <div class="panel-section" style="border-color: var(--color-cyan-glow);">
           <div class="panel-header" style="color: var(--color-cyan-glow);">🚨 NİHAİ KARAR ANI</div>
-          <p style="font-size: 11px; margin-bottom: 8px;">Sinyal %100 çözümlendi. Erebus-7 istasyonunun nihai rotasını seçin:</p>
+          <p style="font-size: 11px; margin-bottom: 8px;">Sinyal paketlerinin %100'ü deşifre edildi. Erebus-7 rotasını seçin:</p>
           <div style="display: flex; flex-direction: column; gap: 6px;">
-            <button class="btn btn-primary" id="btn-ending-rescue">📡 Dünya'ya Kurtarma Sinyali Gönder</button>
+            <button class="btn btn-primary" id="btn-ending-rescue" ${(!hullOk || !commsOk) ? 'disabled' : ''}>
+              📡 Dünya'ya Kurtarma Sinyali Gönder ${(!hullOk || !commsOk) ? '(Gereksinim Karşılanmadı)' : ''}
+            </button>
+            ${(!hullOk || !commsOk) ? `
+              <div style="color: var(--color-amber); font-size: 10px;">
+                Gereksinimler: Gövde Bütünlüğü ≥ %50 (${Math.round(this.state.hull.integrity)}%), Sinyal Kalitesi > %30 (${Math.round(this.state.comms.signalQuality)}%)
+              </div>
+            ` : ''}
             <button class="btn btn-danger" id="btn-ending-sacrifice">🌌 Sinyali Derin Uzaya Yönlendir (Fedakarlık)</button>
           </div>
         </div>
@@ -356,6 +557,34 @@ export class UIController {
     if (scopeCanvas) {
       this.signalScopeRenderer = new SignalScopeRenderer(scopeCanvas);
     }
+
+    // Priority Select Listeners
+    const prioritySelects = panel.querySelectorAll('.btn-priority-select');
+    prioritySelects.forEach((sel) => {
+      sel.addEventListener('change', (e) => {
+        const target = e.target as HTMLSelectElement;
+        const sysId = target.getAttribute('data-sys') as SystemId;
+        const prio = Number(target.value);
+        if (sysId) {
+          this.state.powerGrid.setPriority(sysId, prio);
+          this.state.addLog(`Sistem Önceliği Güncellendi: [${sysId}] -> Öncelik ${prio}`);
+        }
+      });
+    });
+
+    // Task Cancel Listeners
+    const cancelBtns = panel.querySelectorAll('.btn-cancel-task');
+    cancelBtns.forEach((btn) => {
+      btn.addEventListener('click', (e) => {
+        const target = e.currentTarget as HTMLElement;
+        const taskId = target.getAttribute('data-taskid');
+        if (taskId) {
+          this.audio.playClick();
+          this.cmd.cancelDroneTask(taskId);
+          this.renderRightInfoPanel();
+        }
+      });
+    });
 
     document.getElementById('btn-save-game')?.addEventListener('click', () => {
       this.audio.playClick();
@@ -374,10 +603,12 @@ export class UIController {
     document.getElementById('btn-ending-rescue')?.addEventListener('click', () => {
       this.audio.playAlarm();
       this.state.narrativeDirector.chooseEnding(this.state, 'RESCUE');
+      this.renderRightInfoPanel();
     });
     document.getElementById('btn-ending-sacrifice')?.addEventListener('click', () => {
       this.audio.playAlarm();
       this.state.narrativeDirector.chooseEnding(this.state, 'SACRIFICE');
+      this.renderRightInfoPanel();
     });
   }
 
@@ -396,7 +627,38 @@ export class UIController {
 
     let html = '';
 
-    if (this.activeTab === 'reactor') {
+    if (this.activeTab === 'logs') {
+      html = `
+        <div style="display: flex; flex-direction: column; width: 100%; max-height: 120px; overflow-y: auto;">
+          <span style="font-family: var(--font-mono); font-size: 11px; color: var(--color-amber); margin-bottom: 4px;">📜 İSTASYON SEYİR DEFTERİ VE OLAY GÜNLÜĞÜ:</span>
+          ${this.state.logs.map(log => `
+            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--text-main); border-bottom: 1px solid rgba(255,255,255,0.05); padding: 2px 0;">
+              ${log}
+            </div>
+          `).join('')}
+        </div>
+      `;
+    } else if (this.activeTab === 'drones') {
+      const damagedMods = this.state.modules.filter(m => m.health < 100 || m.isBreached);
+      const idleDrones = this.state.repairManager.drones.filter(d => d.status === 'IDLE');
+
+      html = `
+        <div style="display: flex; align-items: center; gap: 12px; width: 100%; flex-wrap: wrap;">
+          <span style="font-family: var(--font-mono); font-size: 11px;">HIZLI DRON GÖREVLENDİRME:</span>
+          ${damagedMods.length > 0 ? `
+            <select id="drone-target-select" class="btn" style="background: var(--bg-dark); color: var(--text-main);">
+              ${damagedMods.map(m => `
+                <option value="${m.id}">${m.name} (${m.isBreached ? '⚠️ Sızıntı' : `%${Math.round(m.health)} Sağlık`})</option>
+              `).join('')}
+            </select>
+            <button class="btn btn-primary" id="btn-drone-seal" ${idleDrones.length === 0 ? 'disabled' : ''}>⚠️ Sızıntıyı Mühürle</button>
+            <button class="btn btn-primary" id="btn-drone-repair" ${idleDrones.length === 0 ? 'disabled' : ''}>🔧 Modülü Onar</button>
+          ` : `
+            <span style="font-family: var(--font-mono); font-size: 11px; color: var(--color-green);">✓ Tüm modüller mükemmel durumda! Arıza bulunmuyor.</span>
+          `}
+        </div>
+      `;
+    } else if (this.activeTab === 'reactor') {
       html = `
         <div style="display: flex; align-items: center; gap: 16px; width: 100%;">
           <label style="font-family: var(--font-mono); font-size: 11px;">REAKTÖR GÜÇ SEVİYESİ (%):</label>
@@ -415,7 +677,7 @@ export class UIController {
       `;
     } else if (selectedMod) {
       html = `
-        <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="display: flex; align-items: center; gap: 12px; flex-wrap: wrap;">
           <span style="font-family: var(--font-mono); font-size: 11px;">KOMUTLAR [${selectedMod.name}]:</span>
           <button class="btn btn-primary" id="btn-dispatch-repair">${SVG_ICONS.drones} Dron Onarımı Başlat</button>
           ${selectedMod.isBreached ? `<button class="btn btn-danger" id="btn-dispatch-seal">⚠️ Sızıntıyı Mühürle</button>` : ''}
@@ -431,6 +693,23 @@ export class UIController {
     }
 
     ops.innerHTML = html;
+
+    // Attach Drone Tab action listeners
+    if (this.activeTab === 'drones') {
+      const selectEl = document.getElementById('drone-target-select') as HTMLSelectElement;
+      document.getElementById('btn-drone-seal')?.addEventListener('click', () => {
+        if (!selectEl) return;
+        this.audio.playClick();
+        this.cmd.dispatchRepairTask(selectEl.value, 'SEAL_BREACH', 15);
+        this.renderRightInfoPanel();
+      });
+      document.getElementById('btn-drone-repair')?.addEventListener('click', () => {
+        if (!selectEl) return;
+        this.audio.playClick();
+        this.cmd.dispatchRepairTask(selectEl.value, 'REPAIR_MODULE', 20);
+        this.renderRightInfoPanel();
+      });
+    }
 
     document.getElementById('reactor-throttle-slider')?.addEventListener('input', (e) => {
       const val = Number((e.target as HTMLInputElement).value);
@@ -461,14 +740,17 @@ export class UIController {
       document.getElementById('btn-dispatch-repair')?.addEventListener('click', () => {
         this.audio.playClick();
         this.cmd.dispatchRepairTask(selectedMod.id, 'REPAIR_MODULE', 20);
+        this.renderRightInfoPanel();
       });
       document.getElementById('btn-dispatch-seal')?.addEventListener('click', () => {
         this.audio.playClick();
         this.cmd.dispatchRepairTask(selectedMod.id, 'SEAL_BREACH', 15);
+        this.renderRightInfoPanel();
       });
       document.getElementById('btn-toggle-isolation')?.addEventListener('click', () => {
         this.audio.playClick();
         this.cmd.toggleModuleIsolation(selectedMod.id);
+        this.renderRightInfoPanel();
       });
     }
   }
